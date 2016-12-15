@@ -12,6 +12,7 @@ import android.provider.ContactsContract;
 import com.PrivacyGuard.Application.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -67,6 +68,18 @@ public class ContactDetection implements IPlugin {
     @Override
     public String modifyResponse(String response) {
         return response;
+    }
+
+    @Override
+    public Collection<LeakDetectable> getDetectables() {
+        ArrayList<LeakDetectable> detectables = new ArrayList<>();
+        for (String phoneNumber: phoneList){
+            detectables.add(new LeakDetectable("Contact Phone Number", phoneNumber, LeakReport.LeakCategory.CONTACT));
+        }
+        for (String email: emailList){
+            detectables.add(new LeakDetectable("Contact Email Address", email, LeakReport.LeakCategory.CONTACT));
+        }
+        return detectables;
     }
 
     @Override

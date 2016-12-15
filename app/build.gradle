@@ -43,4 +43,5 @@ dependencies {
     compile 'com.android.support:appcompat-v7:22.2.1'
     compile 'com.android.support:design:22.2.1'
     compile 'com.google.android.gms:play-services-maps:8.4.0'
+    compile 'org.ahocorasick:ahocorasick:0.3.0'
 }

@@ -91,7 +91,7 @@ public class TCPForwarderWorker extends Thread {
                         msg.get(temp);
                         PrivacyGuard.tcpForwarderWorkerRead += length;
                         forwarder.forwardResponse(temp);
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                 }

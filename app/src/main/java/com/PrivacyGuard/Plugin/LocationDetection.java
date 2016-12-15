@@ -11,6 +11,7 @@ import android.support.annotation.Nullable;
 import com.PrivacyGuard.Application.Logger;
 import com.PrivacyGuard.Plugin.LeakReport.LeakCategory;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +68,11 @@ public class LocationDetection implements IPlugin {
     @Override
     public String modifyResponse(String response) {
         return response;
+    }
+
+    @Override
+    public Collection<LeakDetectable> getDetectables() {
+        return null;
     }
 
     @Override

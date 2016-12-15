@@ -20,16 +20,19 @@
 package com.PrivacyGuard.Application.Network.Forwarder;
 
 
-import android.util.Log;
-
 import com.PrivacyGuard.Application.Logger;
 import com.PrivacyGuard.Application.MyVpnService;
 import com.PrivacyGuard.Application.PrivacyGuard;
 import com.PrivacyGuard.Plugin.IPlugin;
+import com.PrivacyGuard.Plugin.LeakDetectable;
+import com.PrivacyGuard.Plugin.LeakInstance;
 import com.PrivacyGuard.Plugin.LeakReport;
 import com.PrivacyGuard.Utilities.ByteArray;
 import com.PrivacyGuard.Utilities.ByteArrayPool;
 
+import org.ahocorasick.trie.Emit;
+import org.ahocorasick.trie.Trie;
+import org.ahocorasick.trie.handler.EmitHandler;
 import org.sandrop.webscarab.model.ConnectionDescriptor;
 
 import java.io.IOException;
@@ -39,8 +42,10 @@ import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Locale;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
@@ -65,6 +70,9 @@ public class LocalServerForwarder extends Thread {
     private LinkedBlockingQueue<ByteArray> toFilter = new LinkedBlockingQueue<>();
     private SocketChannel inChannel, outChannel;
 
+    private Trie detectionTrie;
+    private Map<String, LeakDetectable> detectables;
+
     public LocalServerForwarder(Socket inSocket, Socket outSocket, boolean isOutgoing, MyVpnService vpnService) {
         this.inSocket = inSocket;
         try {
@@ -77,7 +85,10 @@ public class LocalServerForwarder extends Thread {
         this.destIP = outSocket.getInetAddress().getHostAddress();
         if (outSocket.getPort() == 443) destIP += " (SSL)";
         this.vpnService = vpnService;
-        if (outgoing) this.plugins = vpnService.getNewPlugins();
+        if (outgoing) {
+            this.plugins = vpnService.getNewPlugins();
+            buildDetectionTrie();
+        }
         setDaemon(true);
     }
 
@@ -88,8 +99,28 @@ public class LocalServerForwarder extends Thread {
         this.destIP = out.socket().getInetAddress().getHostAddress();
         if (out.socket().getPort() == 443) destIP += " (SSL)";
         this.vpnService = vpnService;
-        if (outgoing) this.plugins = vpnService.getNewPlugins();
+        if (outgoing) {
+            this.plugins = vpnService.getNewPlugins();
+            buildDetectionTrie();
+        }
         setDaemon(true);
+    }
+
+    private void buildDetectionTrie(){
+        this.detectables = new HashMap<>();
+        Trie.TrieBuilder builder = Trie.builder().caseInsensitive();
+
+        for (IPlugin plugin : plugins){
+            Collection<LeakDetectable> detectables = plugin.getDetectables();
+            if(detectables!=null){
+                for(LeakDetectable detectable : detectables) {
+                    this.detectables.put(detectable.keyword, detectable);
+                    builder.addKeyword(detectable.keyword);
+                }
+            }
+        }
+
+        detectionTrie = builder.build();
     }
 
     public static void connect(Socket clientSocket, Socket serverSocket, MyVpnService vpnService) throws Exception {
@@ -152,31 +183,40 @@ public class LocalServerForwarder extends Thread {
     }
 
     public class FilterThread extends Thread {
+        private class ReportEmitHandler implements EmitHandler{
+            public String appName = null;
+            public String packageName = null;
+
+            @Override
+            public void emit(Emit emit) {
+                LeakDetectable detectable = detectables.get(emit.getKeyword());
+                LeakReport leak = new LeakReport(detectable.category);
+                leak.addLeak(new LeakInstance(detectable.type,detectable.keyword));
+                leak.appName = appName;
+                leak.packageName = packageName;
+                vpnService.notify(leak);
+                if (DEBUG) Logger.v(TAG, appName + " is leaking " + leak.category.name());
+                Logger.logLeak(leak.category.name());
+            }
+        }
+        ReportEmitHandler emitHandler = new ReportEmitHandler();
+
         public void filter(String msg) {
             if (PrivacyGuard.doFilter && outgoing) {
-                String appName = null;
-                String packageName = null;
                 ConnectionDescriptor des = vpnService.getClientAppResolver().getClientDescriptorBySocket(inSocket);
                 if (des != null) {
-                    appName = des.getName();
-                    packageName = des.getNamespace();
+                    emitHandler.appName = des.getName();
+                    emitHandler.packageName = des.getNamespace();
+
                 } else {
-                    appName = UNKNOWN;
-                    packageName = UNKNOWN;
+                    emitHandler.appName = UNKNOWN;
+                    emitHandler.packageName = UNKNOWN;
                 }
 
-                Logger.logTraffic(packageName, appName, destIP, msg);
+                Logger.logTraffic(emitHandler.packageName, emitHandler.appName, destIP, msg);
 
-                for (IPlugin plugin : plugins) {
-                    LeakReport leak = plugin.handleRequest(msg);
-                    if (leak != null) {
-                        leak.appName = appName;
-                        leak.packageName = packageName;
-                        vpnService.notify(leak);
-                        if (DEBUG) Logger.v(TAG, appName + " is leaking " + leak.category.name());
-                        Logger.logLeak(leak.category.name());
-                    }
-                }
+                detectionTrie.parseText(msg, emitHandler);
+
             }
         }
 

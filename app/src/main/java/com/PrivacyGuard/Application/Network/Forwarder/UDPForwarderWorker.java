@@ -79,7 +79,7 @@ public class UDPForwarderWorker extends Thread {
         } catch (SocketException e) {
             // receive() got interrupted
             return;
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return;
         }

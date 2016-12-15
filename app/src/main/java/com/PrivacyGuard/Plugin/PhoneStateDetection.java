@@ -7,7 +7,9 @@ import android.telephony.TelephonyManager;
 import com.PrivacyGuard.Utilities.HashHelpers;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by frank on 23/07/14.
@@ -48,6 +50,18 @@ public class PhoneStateDetection implements IPlugin {
     @Override
     public String modifyResponse(String response) {
         return response;
+    }
+
+    @Override
+    public Collection<LeakDetectable> getDetectables() {
+        ArrayList<LeakDetectable> detectables = new ArrayList<>();
+        for (Map.Entry<String, String> e : nameofValue.entrySet()) {
+            detectables.add(new LeakDetectable(
+                                e.getValue(),
+                                e.getKey(),
+                                LeakReport.LeakCategory.DEVICE));
+        }
+        return detectables;
     }
 
     @Override
