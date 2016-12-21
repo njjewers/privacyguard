@@ -138,7 +138,7 @@ public class TCPForwarderWorker extends Thread {
                 // happens when connection gets terminated by TCPForwarder
                 //e.printStackTrace();
                 return;
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
